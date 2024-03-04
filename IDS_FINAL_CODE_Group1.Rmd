@@ -1,0 +1,1646 @@
+---
+title: "IDSPROJECT"
+output: html_document
+date: "2023-11-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+#a)Determine the best approach to read and merge the data and determine what should be
+#the output during this ‘data preparation’ phase.
+#b) Do exploratory analysis of the data – to gain some basic insight about the data
+library(tidyverse)
+library(arrow)
+weather_data <- "https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/weather/2023-weather-data/G4500910.csv"
+df_weather <- read_csv(weather_data)
+metadata<-"https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/data_dictionary.csv"
+df_metadata <- read_csv(metadata)
+energy_usage<-"https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/2023-houseData/65.parquet"
+df_energy<-read_parquet(energy_usage)
+static_data <- "https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/static_house_info.parquet"
+df_static <- read_parquet(static_data)
+head(df_weather)
+head(df_static)
+view(df_metadata)
+head(df_energy)
+tail(df_energy)
+str(df_energy)
+str(df_weather)
+str(df_static)
+```
+
+
+```{r cars}
+#MERGING WEATHER DATASETS
+
+#To create weather datasets -we have read all the 46 county csv weather files using the 
+#below function and populated the in.county values in a new column so that it can be
+#merged with static data after wards.
+
+#Cleaning -No Na or null,blank values were found.
+
+library(dplyr)
+library(purrr)
+library(lubridate)
+
+# List of in.county values
+counties <- unique(df_static$in.county)
+
+# Function to read and merge a CSV file based on in.county, filtering rows for the month of July
+merge_csv_and_filter_july <- function(county) {
+  url <- paste0("https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/weather/2023-weather-data/", county, ".csv")
+  
+  # Read CSV file
+  data <- read.csv(url)
+  
+  # Parse datetime column
+  data$date_time <- ymd_hms(data$date_time)
+  
+  # Filter rows for the month of July
+  data_july <- data %>%
+    filter(month(date_time) == 7) %>%
+    mutate(in.county = county)
+  
+  return(data_july)
+}
+
+# Use purrr::map_dfr to apply the function to each in.county value and bind them row-wise
+merged_data_weather_july <- map_dfr(counties, merge_csv_and_filter_july)
+
+
+colnames(merged_data_weather_july) <- c("time", "Dry Bulb Temperature [°C]","Relative Humidity [%]","Wind Speed [m/s]","Wind Direction [Deg]",
+                           "Global Horizontal Radiation [W/m2]","Direct Normal Radiation [W/m2]","Diffuse Horizontal Radiation [W/m2]"
+                           ,"in.county")
+
+
+
+
+# Print the updated data frame
+print(merged_data_weather_july)
+colSums(is.na(merged_data_weather_july))
+
+# To check any blank values
+
+# Check for numeric columns in merged_data_weather_july
+numeric_cols <- sapply(merged_data_weather_july, is.numeric)
+
+# Filter the data frame to include only numeric columns
+numeric_data <- merged_data_weather_july[, numeric_cols, drop = FALSE]
+
+# Check for NULL or blank values in numeric columns
+any_blank_numeric <- any(sapply(numeric_data, function(x) any(is.na(x) | x == "")))
+any_blank_numeric
+
+```
+
+
+```{r cars}
+library(dplyr)
+library(purrr)
+library(lubridate)
+
+# Energy was merged with the same method as used for weather datasets.
+#5710 parquet files were read and building id was added as a column in this merged 
+#energy datasets so that it can be merged with static afterwards on building id.
+
+
+
+# Function to read and merge a CSV file based on bldg_id
+buildings <- unique(df_static$bldg_id)
+
+# Function to read and merge a CSV file based on bldg_id
+merge_and_filter_parquet <- function(building) {
+  url <- paste0("https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/2023-houseData/", building, ".parquet")
+  
+  # Read Parquet file
+  data <- read_parquet(url)
+  
+   data$time <- parse_date_time(data$time, orders = "%Y-%m-%d %H:%M:%S")
+  # Filter rows for the month of July
+  data_filtered <- data %>%
+    filter(month(time) == 7) %>%
+    mutate(bldg_id = building)
+  
+  
+  return(data_filtered)
+}
+
+# Use purrr::map_dfr to apply the function to each bldg_id value and bind them row-wise
+merged_data_bldg <- map_dfr(buildings, merge_and_filter_parquet)
+
+# Print the merged and filtered data
+print(merged_data_bldg)
+
+
+tail(merged_data_bldg)
+
+colSums(is.na(merged_data_bldg))
+
+# To check any blank values
+
+# Check for numeric columns in merged_data_bldg
+numeric_cols <- sapply(merged_data_bldg, is.numeric)
+
+# Filter the data frame to include only numeric columns
+numeric_data <- merged_data_bldg [, numeric_cols, drop = FALSE]
+
+# Check for NULL or blank values in numeric columns
+any_blank_numeric <- any(sapply(numeric_data, function(x) any(is.na(x) | x == "")))
+any_blank_numeric
+
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+library(dplyr)
+
+output_path <- "C:/Users/disha/OneDrive/Desktop/Energy_hourly_data.csv"  # Replace with your desired path
+
+# Write the merged data to an Excel file
+write.csv(merged_data_bldg, output_path, row.names = FALSE)
+
+# Print a message indicating that the file has been saved
+cat("Merged data has been saved to Excel file at:", output_path)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+#SELECTING COLUMNS FOR MODELLING AND MERGING
+# Drop columns by name
+df_static_updated_1 <- df_static[, !(names(df_static) %in% c("upgrade"
+,"weight"
+,"applicability"
+,"in.ahs_region"
+,"in.ashrae_iecc_climate_zone_2004"
+,"in.ashrae_iecc_climate_zone_2004_2_a_split"
+,"in.cec_climate_zone"
+,"in.ceiling_fan"
+,"in.census_division"
+,"in.census_division_recs"
+,"in.census_region"
+,"in.corridor"
+,"in.dehumidifier"
+,"in.door_area"
+,"in.eaves"
+,"in.electric_vehicle"
+,"in.emissions_electricity_folders"
+,"in.emissions_electricity_units"
+,"in.emissions_electricity_values_or_filepaths"
+,"in.emissions_fossil_fuel_units"
+,"in.emissions_fuel_oil_values"
+,"in.emissions_natural_gas_values"
+,"in.emissions_propane_values"
+,"in.emissions_scenario_names"
+,"in.emissions_types"
+,"in.emissions_wood_values"
+,"in.geometry_building_horizontal_location_mf"
+,"in.geometry_building_horizontal_location_sfa"
+,"in.geometry_building_level_mf"
+,"in.geometry_building_number_units_mf"
+,"in.geometry_building_number_units_sfa"
+,"in.geometry_building_type_acs"
+,"in.geometry_building_type_height"
+,"in.geometry_building_type_recs"
+,"in.holiday_lighting"
+,"in.hot_water_distribution"
+,"in.hvac_has_shared_system"
+,"in.hvac_secondary_heating_efficiency"
+,"in.hvac_secondary_heating_type_and_fuel"
+,"in.hvac_shared_efficiencies"
+,"in.hvac_system_is_faulted"
+,"in.hvac_system_single_speed_ac_airflow"
+,"in.hvac_system_single_speed_ac_charge"
+,"in.hvac_system_single_speed_ashp_airflow"
+,"in.hvac_system_single_speed_ashp_charge"
+,"in.iso_rto_region"
+,"in.lighting_interior_use"
+,"in.lighting_other_use"
+,"in.location_region"
+,"in.mechanical_ventilation"
+,"in.natural_ventilation"
+,"in.neighbors"
+,"in.overhangs"
+,"in.radiant_barrier"
+,"in.schedules"
+,"in.simulation_control_run_period_begin_day_of_month"
+,"in.simulation_control_run_period_begin_month"
+,"in.simulation_control_run_period_calendar_year"
+,"in.simulation_control_run_period_end_day_of_month"
+,"in.simulation_control_run_period_end_month"
+,"in.simulation_control_timestep"
+,"in.solar_hot_water"
+,"in.state"
+,"in.units_represented"
+,"in.water_heater_in_unit"
+,"in.bathroom_spot_vent_hour"
+,"in.clothes_washer_presence"
+,"in.cooling_setpoint"
+,"in.cooling_setpoint_has_offset"
+,"in.cooling_setpoint_offset_magnitude"
+,"in.cooling_setpoint_offset_period"
+,"in.county_and_puma"
+,"in.doors"
+,"in.generation_and_emissions_assessment_region"
+,"in.geometry_attic_type"
+,"in.geometry_floor_area"
+,"in.geometry_floor_area_bin"
+,"in.geometry_foundation_type"
+,"in.geometry_garage"
+,"in.geometry_stories"
+,"in.geometry_stories_low_rise"
+,"in.geometry_story_bin"
+,"in.heating_setpoint_offset_magnitude"
+,"in.hvac_has_ducts"
+,"in.hvac_has_zonal_electric_heating"
+,"in.hvac_heating_efficiency"
+,"in.infiltration"
+,"in.interior_shading"
+,"in.plug_load_diversity"
+,"in.plug_loads"
+,"in.puma"
+,"in.puma_metro_status"
+,"in.pv_orientation"
+,"in.pv_system_size"
+,"in.range_spot_vent_hour"
+,"in.reeds_balancing_area"
+,"in.vintage_acs"
+,"in.window_areas"
+,"upgrade.insulation_roof"
+,"upgrade.water_heater_efficiency"
+,"upgrade.hvac_cooling_efficiency"
+,"upgrade.infiltration_reduction"
+,"upgrade.geometry_foundation_type"
+,"upgrade.clothes_dryer"
+,"upgrade.insulation_ceiling"
+,"upgrade.ducts"
+,"upgrade.hvac_heating_type"
+,"upgrade.insulation_wall"
+,"upgrade.insulation_foundation_wall"
+,"upgrade.hvac_heating_efficiency"
+))]
+
+library(dplyr)
+
+# Assuming 'your_dataset' is the name of your dataset
+# Replace 'column1', 'column2', etc., with the actual column names you want to select
+
+df_static_updated <- select(df_static_updated_1, bldg_id,
+in.sqft,
+in.bedrooms,
+in.building_america_climate_zone,
+in.city,
+in.county,
+in.dishwasher,
+in.heating_fuel,
+in.heating_setpoint,
+in.hvac_cooling_efficiency,
+in.hvac_cooling_type,
+in.hvac_heating_type,
+in.hvac_heating_type_and_fuel,
+in.income,
+in.insulation_ceiling,
+in.insulation_floor,
+in.insulation_foundation_wall,
+in.insulation_roof,
+in.insulation_slab,
+in.insulation_wall,
+in.lighting,
+in.misc_extra_refrigerator,
+in.misc_freezer,
+in.misc_gas_fireplace,
+in.misc_gas_grill,
+in.misc_gas_lighting,
+in.misc_hot_tub_spa,
+in.misc_pool_heater,
+in.misc_pool_pump,
+in.misc_well_pump,
+in.occupants,
+in.refrigerator,
+in.roof_material,
+in.water_heater_efficiency,
+in.water_heater_fuel,
+in.weather_file_latitude,
+in.weather_file_longitude
+)
+
+# Print the modified data frame
+print(df_static_updated)
+
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+library(writexl)
+
+output_path <- "C:/Users/disha/OneDrive/Desktop/Static_data.xlsx"  # Replace with your desired path
+
+# Write the merged data to an Excel file
+write_xlsx(df_static_updated, output_path)
+
+# Print a message indicating that the file has been saved
+cat("Merged data has been saved to Excel file at:", output_path)
+```
+
+```{r}
+
+```
+```{r}
+library(dplyr)
+library(tidyr)
+
+energy_merged_Data<-merged_data_bldg
+head(energy_merged_Data)
+library(dplyr)
+
+# Calculating energy fields
+
+energy_summed_df <- energy_merged_Data %>%
+  mutate(Electricity_energy_consumption_kWh = out.electricity.ceiling_fan.energy_consumption+
+out.electricity.clothes_dryer.energy_consumption+
+out.electricity.clothes_washer.energy_consumption+
+out.electricity.cooling_fans_pumps.energy_consumption+
+out.electricity.cooling.energy_consumption+
+out.electricity.dishwasher.energy_consumption+
+out.electricity.freezer.energy_consumption+
+out.electricity.heating_fans_pumps.energy_consumption+
+out.electricity.heating_hp_bkup.energy_consumption+
+out.electricity.heating.energy_consumption+
+out.electricity.hot_tub_heater.energy_consumption+
+out.electricity.hot_tub_pump.energy_consumption+
+out.electricity.hot_water.energy_consumption+
+out.electricity.lighting_exterior.energy_consumption+
+out.electricity.lighting_garage.energy_consumption+
+out.electricity.lighting_interior.energy_consumption+
+out.electricity.mech_vent.energy_consumption+
+out.electricity.plug_loads.energy_consumption+
+out.electricity.pool_heater.energy_consumption+
+out.electricity.pool_pump.energy_consumption+
+out.electricity.pv.energy_consumption+
+out.electricity.range_oven.energy_consumption+
+out.electricity.refrigerator.energy_consumption+
+out.electricity.well_pump.energy_consumption
+,Fuel_oil_energy_consumption_kWh=out.fuel_oil.heating_hp_bkup.energy_consumption+
+out.fuel_oil.heating.energy_consumption+
+out.fuel_oil.hot_water.energy_consumption
+,Natural_gas_energy_consumption_kWh=out.natural_gas.clothes_dryer.energy_consumption+
+out.natural_gas.fireplace.energy_consumption+
+out.natural_gas.grill.energy_consumption+
+out.natural_gas.heating_hp_bkup.energy_consumption+
+out.natural_gas.heating.energy_consumption+
+out.natural_gas.hot_tub_heater.energy_consumption+
+out.natural_gas.hot_water.energy_consumption+
+out.natural_gas.lighting.energy_consumption+
+out.natural_gas.pool_heater.energy_consumption+
+out.natural_gas.range_oven.energy_consumption,
+Propane_energy_consumption_kWh=out.propane.clothes_dryer.energy_consumption+
+out.propane.heating_hp_bkup.energy_consumption+
+out.propane.heating.energy_consumption+
+out.propane.hot_water.energy_consumption+
+out.propane.range_oven.energy_consumption
+) %>%
+  select(-out.electricity.ceiling_fan.energy_consumption
+,-out.electricity.clothes_dryer.energy_consumption
+,-out.electricity.clothes_washer.energy_consumption
+,-out.electricity.cooling_fans_pumps.energy_consumption
+,-out.electricity.cooling.energy_consumption
+,-out.electricity.dishwasher.energy_consumption
+,-out.electricity.freezer.energy_consumption
+,-out.electricity.heating_fans_pumps.energy_consumption
+,-out.electricity.heating_hp_bkup.energy_consumption
+,-out.electricity.heating.energy_consumption
+,-out.electricity.hot_tub_heater.energy_consumption
+,-out.electricity.hot_tub_pump.energy_consumption
+,-out.electricity.hot_water.energy_consumption
+,-out.electricity.lighting_exterior.energy_consumption
+,-out.electricity.lighting_garage.energy_consumption
+,-out.electricity.lighting_interior.energy_consumption
+,-out.electricity.mech_vent.energy_consumption
+,-out.electricity.plug_loads.energy_consumption
+,-out.electricity.pool_heater.energy_consumption
+,-out.electricity.pool_pump.energy_consumption
+,-out.electricity.pv.energy_consumption
+,-out.electricity.range_oven.energy_consumption
+,-out.electricity.refrigerator.energy_consumption
+,-out.electricity.well_pump.energy_consumption
+,-out.fuel_oil.heating_hp_bkup.energy_consumption
+,-out.fuel_oil.heating.energy_consumption
+,-out.fuel_oil.hot_water.energy_consumption
+,-out.natural_gas.clothes_dryer.energy_consumption
+,-out.natural_gas.fireplace.energy_consumption
+,-out.natural_gas.grill.energy_consumption
+,-out.natural_gas.heating_hp_bkup.energy_consumption
+,-out.natural_gas.heating.energy_consumption
+,-out.natural_gas.hot_tub_heater.energy_consumption
+,-out.natural_gas.hot_water.energy_consumption
+,-out.natural_gas.lighting.energy_consumption
+,-out.natural_gas.pool_heater.energy_consumption
+,-out.natural_gas.range_oven.energy_consumption
+,-out.propane.clothes_dryer.energy_consumption
+,-out.propane.heating_hp_bkup.energy_consumption
+,-out.propane.heating.energy_consumption
+,-out.propane.hot_water.energy_consumption
+,-out.propane.range_oven.energy_consumption
+)
+print(energy_summed_df)
+
+
+
+
+
+# Install and load necessary packages if not already installed
+# install.packages("dplyr")
+# library(dplyr)
+
+# Assuming 'data' is your dataset (data frame or matrix)
+set.seed(42)  # Set a seed for reproducibility
+
+# Define the percentage of data to take (e.g., 70%)
+percentage_to_take <- 0.7
+
+# Calculate the number of rows to select
+num_rows_to_select <- round(percentage_to_take * nrow(energy_summed_df))
+
+# Generate random indices
+indices <- sample(seq_len(nrow(energy_summed_df)), size = num_rows_to_select)
+
+# Create the subset containing 70% of the data
+sampled_df <- energy_summed_df[indices, ]
+
+
+
+```
+
+
+```{r}
+
+#MERGING STATIC DATASET AND ENERGY DATASET ON BLDG_ID
+# View the result
+print(sampled_df)
+merged_static_energy<-merge(df_static_updated,sampled_df,by="bldg_id")
+merged_static_energy
+#We can use this filteration as you suggested during the presentation.We will incorporate
+#these changes.
+#filtered_data <- merged_static_energy[merged_static_energy$in.bedrooms = 3, ]
+merged_static_energy <- merged_static_energy %>% 
+na.omit() 
+final_energy_static_merge<-merged_static_energy
+df_1 <- na.omit(final_energy_static_merge)
+df_1
+```
+
+
+```{r}
+#MERGING ENERGY, STATIC And WEATHER Datasets ON IN.COUNTY and TIME
+merged_static_weather_energy<-left_join(df_1,merged_data_weather_july,by=c("in.county","time"))
+head(merged_static_weather_energy)
+```
+
+```{r}
+#CALCULATING TOTAL ENERGY CONSUMPTION AND ADDING A COLUMN WITH 5 DEGREES WARMER TEMP
+
+#e) Create a new weather dataset, with all July temperatures 5 degrees warmer
+test_df <- merged_static_weather_energy %>%
+  mutate(
+    Total_Energy_Consumption = Electricity_energy_consumption_kWh + 
+                                Fuel_oil_energy_consumption_kWh + 
+                                Natural_gas_energy_consumption_kWh + 
+                                Propane_energy_consumption_kWh,
+    New_Dry_Bulb_Temperature = `Dry Bulb Temperature [°C]` + 5
+  )
+
+head(test_df)
+
+```
+
+
+```{r}
+#SPLITTING THE DATASETS FOR MODELLING BASED ON CITIES
+city_split <- split(test_df, test_df$in.city)
+
+# Display the resulting data frames
+for (city_category in names(city_split)) {
+  cat("City Category:", city_category, "\n")
+  print(city_split[[city_category]])
+  cat("\n")
+}
+```
+
+
+```{r}
+#SPLITTING BASED ON INSULATION_WALL
+insulation_split <- split(test_df, test_df$in.insulation_wall)
+
+# Display the resulting data frames
+for (insulation_category in names(insulation_split)) {
+  cat("City Category:", insulation_category, "\n")
+  print(insulation_split[[insulation_category]])
+  cat("\n")
+}
+
+```
+
+
+
+
+
+```{r}
+library(dplyr)
+
+output_path <- "C:/Users/disha/OneDrive/Desktop/Final_data.csv"  # Replace with your desired path
+
+# Write the merged data to an Excel file
+write.csv(merged_static_weather_energy, output_path, row.names = FALSE)
+
+# Print a message indicating that the file has been saved
+cat("Merged data has been saved to Excel file at:", output_path)
+```
+
+
+
+```{r}
+
+```
+```{r}
+#c) Build a model that predicts the energy usage, for a given hour, for the month of July.
+#July was selected, as eSC thought July is typically the highest energy usage month.
+#Hint: you will need to try several models and pick the best model.
+#d) Understand and be able to explain your model’s accuracy.
+
+# ORIGINAL DRY BULB TEMPERATURE-CITY
+library(tidyverse)
+library(tree)
+library(caTools)
+
+# Assuming city_split is a list containing your data frames
+
+# Initialize an empty list to store the results for each city
+results_list <- list()
+
+# Loop through cities 3 to 16
+for (city_id in 3:16) {
+  # Convert 'time' to datetime format
+  city_split[[city_id]]$time <- as.POSIXct(city_split[[city_id]]$time)
+  
+  # Extract month and hour
+  city_split[[city_id]]$month <- as.numeric(format(city_split[[city_id]]$time, "%m"))
+  city_split[[city_id]]$hour <- as.numeric(format(city_split[[city_id]]$time, "%H"))
+  
+  # Select data for July
+  july_data <- filter(city_split[[city_id]], month == 7)
+  
+  # Choose relevant features-we have selected these variables for modelling and for 
+  #shiny app we have selected certain variables from this list.
+ features <- c('in.sqft', 'in.bedrooms', 'in.building_america_climate_zone', 'in.county', 'in.misc_extra_refrigerator',
+                'in.misc_freezer',
+                'in.misc_gas_fireplace',
+                'in.misc_gas_grill',
+                'in.misc_gas_lighting',
+                'in.misc_hot_tub_spa',
+                'in.misc_pool_heater',
+                'in.misc_pool_pump',
+                'in.misc_well_pump', 
+                'in.heating_fuel',
+                'in.heating_setpoint',
+                'in.hvac_cooling_efficiency',
+                'in.hvac_cooling_type',
+                'in.hvac_heating_type',
+                'in.insulation_wall',
+                'in.insulation_ceiling',
+                 'in.insulation_floor',
+                 'in.insulation_foundation_wall',
+                 'in.insulation_roof',
+                 'in.insulation_slab',
+'Dry Bulb Temperature [°C]', 'Relative Humidity [%]', 'Wind Speed [m/s]','Direct Normal Radiation [W/m2]',
+              'Diffuse Horizontal Radiation [W/m2]',
+              'Global Horizontal Radiation [W/m2]')
+  
+  # Encode categorical features
+  july_data <- july_data %>%
+    select(features, Total_Energy_Consumption, hour) %>%
+    mutate(across(starts_with("in."), as.factor))
+  
+  # Split the dataset
+  # for reproducibility
+  split <- sample.split(july_data$Total_Energy_Consumption, SplitRatio = 0.7)
+  train_data <- subset(july_data, split == TRUE)
+  test_data <- subset(july_data, split == FALSE)
+  
+  # Rename columns with special characters
+  colnames(train_data) <- make.names(colnames(train_data))
+  colnames(test_data) <- make.names(colnames(test_data))
+  
+  # Build a Decision Tree model
+  model <- rpart(Total_Energy_Consumption ~ ., data = train_data)
+  
+  # Make predictions for all hours in the test set
+  all_predictions <- predict(model, newdata = test_data)
+  
+  rmse <- sqrt(mean((all_predictions - test_data$Total_Energy_Consumption)^2))
+  accuracy <- 1 - rmse
+  
+  # Combine predictions with the original test_data
+  predictions_with_hour <- cbind(test_data$hour, all_predictions)
+  
+  # Convert to a data frame
+  predictions_with_hour_df <- as.data.frame(predictions_with_hour)
+  
+  # Group predictions by hour and calculate the mean prediction for each hour
+  grouped_predictions <- predictions_with_hour_df %>%
+    group_by(V1) %>%
+    summarize(sum_prediction = sum(all_predictions))
+  
+  # Store the results in the list
+  results_list[[paste0("City_", city_id)]] <- list(
+    Accuracy = accuracy,
+    RMSE = rmse,
+    Grouped_Predictions = grouped_predictions
+  )
+}
+
+# Access the results for a specific city, e.g., City 3
+results_list[["City_3"]]
+results_list[["City_4"]]
+
+```
+
+
+```{r}
+#NEW DRY BULB TEMPERATURE-CITY
+library(tidyverse)
+library(tree)
+library(caTools)
+
+# Assuming city_split is a list containing your data frames
+
+# Initialize an empty list to store the results for each city
+results_list <- list()
+
+# Loop through cities 3 to 16
+for (city_id in 3:16) {
+  # Convert 'time' to datetime format
+  city_split[[city_id]]$time <- as.POSIXct(city_split[[city_id]]$time)
+  
+  # Extract month and hour
+  city_split[[city_id]]$month <- as.numeric(format(city_split[[city_id]]$time, "%m"))
+  city_split[[city_id]]$hour <- as.numeric(format(city_split[[city_id]]$time, "%H"))
+  
+  # Select data for July
+  july_data <- filter(city_split[[city_id]], month == 7)
+  
+  # Choose relevant features
+ features <- c('in.sqft', 'in.bedrooms', 'in.building_america_climate_zone', 'in.misc_extra_refrigerator',
+                'in.misc_freezer',
+                'in.misc_gas_fireplace',
+                'in.misc_gas_grill',
+                'in.misc_gas_lighting',
+                'in.misc_hot_tub_spa',
+                'in.misc_pool_heater',
+                'in.misc_pool_pump',
+                'in.misc_well_pump', 
+                'in.heating_fuel',
+                'in.heating_setpoint',
+                'in.hvac_cooling_efficiency',
+                'in.hvac_cooling_type',
+                'in.hvac_heating_type',
+                'in.insulation_wall',
+                'in.insulation_ceiling',
+                 'in.insulation_floor',
+                 'in.insulation_foundation_wall',
+                 'in.insulation_roof',
+                 'in.insulation_slab',
+'New_Dry_Bulb_Temperature', 'Relative Humidity [%]', 'Wind Speed [m/s]','Direct Normal Radiation [W/m2]',
+              'Diffuse Horizontal Radiation [W/m2]',
+              'Global Horizontal Radiation [W/m2]')
+  
+  # Encode categorical features
+  july_data <- july_data %>%
+    select(features, Total_Energy_Consumption, hour) %>%
+    mutate(across(starts_with("in."), as.factor))
+  
+  # Split the dataset
+  # for reproducibility
+  split <- sample.split(july_data$Total_Energy_Consumption, SplitRatio = 0.7)
+  train_data <- subset(july_data, split == TRUE)
+  test_data <- subset(july_data, split == FALSE)
+  
+  # Rename columns with special characters
+  colnames(train_data) <- make.names(colnames(train_data))
+  colnames(test_data) <- make.names(colnames(test_data))
+  
+  # Build a Decision Tree model
+  model <- rpart(Total_Energy_Consumption ~ ., data = train_data)
+  
+  # Make predictions for all hours in the test set
+  all_predictions <- predict(model, newdata = test_data)
+  
+  rmse <- sqrt(mean((all_predictions - test_data$Total_Energy_Consumption)^2))
+  accuracy <- 1 - rmse
+  
+  # Combine predictions with the original test_data
+  predictions_with_hour <- cbind(test_data$hour, all_predictions)
+  
+  # Convert to a data frame
+  predictions_with_hour_df <- as.data.frame(predictions_with_hour)
+  
+  # Group predictions by hour and calculate the mean prediction for each hour
+  grouped_predictions <- predictions_with_hour_df %>%
+    group_by(V1) %>%
+    summarize(sum_prediction = sum(all_predictions))
+  
+  # Store the results in the list
+  results_list[[paste0("City_", city_id)]] <- list(
+    Accuracy = accuracy,
+    RMSE = rmse,
+    Grouped_Predictions = grouped_predictions
+  )
+}
+
+# Access the results for a specific city, e.g., City 3
+results_list[["City_3"]]
+results_list[["City_4"]]
+```
+```{r}
+#ORIGINAL DRY BULB TEMPERATURE-INSULATION_WALLS
+library(tidyverse)
+library(tree)
+library(caTools)
+
+# Load the data
+# Assuming insulation_split is a list containing your data frames
+
+# Convert 'time' to datetime format
+insulation_split[[3]]$time <- as.POSIXct(insulation_split[[3]]$time)
+
+# Extract month and hour
+insulation_split[[3]]$month <- as.numeric(format(insulation_split[[3]]$time, "%m"))
+insulation_split[[3]]$hour <- as.numeric(format(insulation_split[[3]]$time, "%H"))
+
+# Select data for July
+july_data <- filter(insulation_split[[3]], month == 7)
+
+# Choose relevant features
+ features <- c('in.sqft', 'in.bedrooms', 'in.building_america_climate_zone', 'in.city', 'in.county', 'in.misc_extra_refrigerator',
+                'in.misc_freezer',
+                'in.misc_gas_fireplace',
+                'in.misc_gas_grill',
+                'in.misc_gas_lighting',
+                'in.misc_hot_tub_spa',
+                'in.misc_pool_heater',
+                'in.misc_pool_pump',
+                'in.misc_well_pump', 
+                'in.heating_fuel',
+                'in.heating_setpoint',
+                'in.hvac_cooling_efficiency',
+                'in.hvac_cooling_type',
+                'in.hvac_heating_type',
+                'in.insulation_ceiling',
+                 'in.insulation_floor',
+                 'in.insulation_foundation_wall',
+                 'in.insulation_roof',
+                 'in.insulation_slab',
+'Dry Bulb Temperature [°C]', 'Relative Humidity [%]', 'Wind Speed [m/s]','Direct Normal Radiation [W/m2]',
+              'Diffuse Horizontal Radiation [W/m2]',
+              'Global Horizontal Radiation [W/m2]')
+
+# Encode categorical features
+july_data <- july_data %>%
+  select(features, Total_Energy_Consumption, hour) %>%
+  mutate(across(starts_with("in."), as.factor))
+
+# Split the dataset
+# for reproducibility
+split <- sample.split(july_data$Total_Energy_Consumption, SplitRatio = 0.7)
+train_data <- subset(july_data, split == TRUE)
+test_data <- subset(july_data, split == FALSE)
+
+# Rename columns with special characters
+colnames(train_data) <- make.names(colnames(train_data))
+colnames(test_data) <- make.names(colnames(test_data))
+
+# Build a Decision Tree model
+model <- rpart(Total_Energy_Consumption ~ ., data = train_data)
+
+# Make predictions for all hours in the test set
+all_predictions <- predict(model, newdata = test_data)
+
+rmse <- sqrt(mean((all_predictions - test_data$Total_Energy_Consumption)^2))
+accuracy <- 1 - rmse
+# Display results
+cat("Accuracy:", accuracy, "\n")
+cat("RMSE:", rmse, "\n")
+# Combine predictions with the original test_data
+predictions_with_hour <- cbind(test_data$hour, all_predictions)
+
+# Convert to a data frame
+predictions_with_hour_df <- as.data.frame(predictions_with_hour)
+head(predictions_with_hour_df)
+# Group predictions by hour and calculate the mean prediction for each hour
+grouped_predictions <- predictions_with_hour_df %>%
+  group_by(V1) %>%
+  summarize(sum_prediction = sum(all_predictions))
+
+# Display the grouped predictions
+print(grouped_predictions)
+
+Brick_12_in_3_wythe_R_19 <- grouped_predictions
+```
+
+
+```{r}
+#NEW DRY BULB TEMPERATURE-INSULATION_WALLS
+library(tidyverse)
+library(tree)
+library(caTools)
+
+# Load the data
+# Assuming insulation_split is a list containing your data frames
+
+# Convert 'time' to datetime format
+insulation_split[[3]]$time <- as.POSIXct(insulation_split[[3]]$time)
+
+# Extract month and hour
+insulation_split[[3]]$month <- as.numeric(format(insulation_split[[3]]$time, "%m"))
+insulation_split[[3]]$hour <- as.numeric(format(insulation_split[[3]]$time, "%H"))
+
+# Select data for July
+july_data <- filter(insulation_split[[3]], month == 7)
+
+# Choose relevant features
+ features <- c('in.sqft', 'in.bedrooms', 'in.building_america_climate_zone', 'in.city', 'in.county', 'in.misc_extra_refrigerator',
+                'in.misc_freezer',
+                'in.misc_gas_fireplace',
+                'in.misc_gas_grill',
+                'in.misc_gas_lighting',
+                'in.misc_hot_tub_spa',
+                'in.misc_pool_heater',
+                'in.misc_pool_pump',
+                'in.misc_well_pump', 
+                'in.heating_fuel',
+                'in.heating_setpoint',
+                'in.hvac_cooling_efficiency',
+                'in.hvac_cooling_type',
+                'in.hvac_heating_type',
+                'in.insulation_ceiling',
+                 'in.insulation_floor',
+                 'in.insulation_foundation_wall',
+                 'in.insulation_roof',
+                 'in.insulation_slab',
+'New_Dry_Bulb_Temperature', 'Relative Humidity [%]', 'Wind Speed [m/s]','Direct Normal Radiation [W/m2]',
+              'Diffuse Horizontal Radiation [W/m2]',
+              'Global Horizontal Radiation [W/m2]')
+
+# Encode categorical features
+july_data <- july_data %>%
+  select(features, Total_Energy_Consumption, hour) %>%
+  mutate(across(starts_with("in."), as.factor))
+
+# Split the dataset
+# for reproducibility
+split <- sample.split(july_data$Total_Energy_Consumption, SplitRatio = 0.7)
+train_data <- subset(july_data, split == TRUE)
+test_data <- subset(july_data, split == FALSE)
+
+# Rename columns with special characters
+colnames(train_data) <- make.names(colnames(train_data))
+colnames(test_data) <- make.names(colnames(test_data))
+
+# Build a Decision Tree model
+model <- rpart(Total_Energy_Consumption ~ ., data = train_data)
+
+# Make predictions for all hours in the test set
+all_predictions <- predict(model, newdata = test_data)
+
+rmse <- sqrt(mean((all_predictions - test_data$Total_Energy_Consumption)^2))
+accuracy <- 1 - rmse
+# Display results
+cat("Accuracy:", accuracy, "\n")
+cat("RMSE:", rmse, "\n")
+# Combine predictions with the original test_data
+predictions_with_hour <- cbind(test_data$hour, all_predictions)
+
+# Convert to a data frame
+predictions_with_hour_df <- as.data.frame(predictions_with_hour)
+head(predictions_with_hour_df)
+# Group predictions by hour and calculate the mean prediction for each hour
+grouped_predictions <- predictions_with_hour_df %>%
+  group_by(V1) %>%
+  summarize(sum_prediction = sum(all_predictions))
+
+# Display the grouped predictions
+print(grouped_predictions)
+
+Brick_12_in_3_wythe_R_19 <- grouped_predictions
+```
+
+
+```{r}
+#f) Use your best model to evaluate peak future energy demand (assuming no new
+#customers)
+#a. Note: this must be model driven, not just increasing energy usage by a percentage
+#g) Show future peak energy demand in total (for an hour):
+#a. For different geographic regions
+#b. For other dimensions /attributes you think important
+#FOR PEAK ENERGY DEMAND USAGE-ORIGINAL TEMPERATURE-CITY WISE
+library(tidyverse)
+library(tree)
+library(caTools)
+
+# Assuming city_split is a list containing your data frames
+
+# Initialize an empty list to store the results for each city
+results_list <- list()
+
+# Loop through cities 3 to 16
+for (city_id in 3:16) {
+  # Convert 'time' to datetime format
+  city_split[[city_id]]$time <- as.POSIXct(city_split[[city_id]]$time)
+  
+  # Extract month and hour
+  city_split[[city_id]]$month <- as.numeric(format(city_split[[city_id]]$time, "%m"))
+  city_split[[city_id]]$hour <- as.numeric(format(city_split[[city_id]]$time, "%H"))
+  
+  # Select data for July
+  july_data <- filter(city_split[[city_id]], month == 7)
+  
+  # Choose relevant features
+ features <- c('in.sqft', 'in.bedrooms', 'in.building_america_climate_zone', 'in.county', 'in.misc_extra_refrigerator',
+                'in.misc_freezer',
+                'in.misc_gas_fireplace',
+                'in.misc_gas_grill',
+                'in.misc_gas_lighting',
+                'in.misc_hot_tub_spa',
+                'in.misc_pool_heater',
+                'in.misc_pool_pump',
+                'in.misc_well_pump', 
+                'in.heating_fuel',
+                'in.heating_setpoint',
+                'in.hvac_cooling_efficiency',
+                'in.hvac_cooling_type',
+                'in.hvac_heating_type',
+                'in.insulation_wall',
+                'in.insulation_ceiling',
+                 'in.insulation_floor',
+                 'in.insulation_foundation_wall',
+                 'in.insulation_roof',
+                 'in.insulation_slab',
+'Dry Bulb Temperature [°C]', 'Relative Humidity [%]', 'Wind Speed [m/s]','Direct Normal Radiation [W/m2]',
+              'Diffuse Horizontal Radiation [W/m2]',
+              'Global Horizontal Radiation [W/m2]')
+  
+  # Encode categorical features
+  july_data <- july_data %>%
+    select(features, Total_Energy_Consumption, hour) %>%
+    mutate(across(starts_with("in."), as.factor))
+  
+  # Split the dataset
+  # for reproducibility
+  split <- sample.split(july_data$Total_Energy_Consumption, SplitRatio = 0.7)
+  train_data <- subset(july_data, split == TRUE)
+  test_data <- subset(july_data, split == FALSE)
+  
+  # Rename columns with special characters
+  colnames(train_data) <- make.names(colnames(train_data))
+  colnames(test_data) <- make.names(colnames(test_data))
+  
+  # Build a Decision Tree model
+  model <- rpart(Total_Energy_Consumption ~ ., data = train_data)
+  
+  # Make predictions for all hours in the test set
+  all_predictions <- predict(model, newdata = test_data)
+  
+  rmse <- sqrt(mean((all_predictions - test_data$Total_Energy_Consumption)^2))
+  accuracy <- 1 - rmse
+  
+  # Combine predictions with the original test_data
+  predictions_with_hour <- cbind(test_data$hour, all_predictions)
+  
+  # Convert to a data frame
+  predictions_with_hour_df <- as.data.frame(predictions_with_hour)
+  
+  # Group predictions by hour and calculate the max prediction for each hour
+  grouped_predictions <- predictions_with_hour_df %>%
+    group_by(V1) %>%
+    summarize(sum_prediction = max(all_predictions))
+  
+  # Store the results in the list
+  results_list[[paste0("City_", city_id)]] <- list(
+    Accuracy = accuracy,
+    RMSE = rmse,
+    Grouped_Predictions = grouped_predictions
+  )
+}
+
+# Access the results for a specific city, e.g., City 3
+results_list[["City_3"]]
+results_list[["City_4"]]
+```
+
+
+
+
+
+```{r}
+#FOR PEAK ENERGY DEMAND USAGE-INCREASED TEMPERATURE-CITY WISE
+library(tidyverse)
+library(tree)
+library(caTools)
+
+# Assuming city_split is a list containing your data frames
+
+# Initialize an empty list to store the results for each city
+results_list <- list()
+
+# Loop through cities 3 to 16
+for (city_id in 3:16) {
+  # Convert 'time' to datetime format
+  city_split[[city_id]]$time <- as.POSIXct(city_split[[city_id]]$time)
+  
+  # Extract month and hour
+  city_split[[city_id]]$month <- as.numeric(format(city_split[[city_id]]$time, "%m"))
+  city_split[[city_id]]$hour <- as.numeric(format(city_split[[city_id]]$time, "%H"))
+  
+  # Select data for July
+  july_data <- filter(city_split[[city_id]], month == 7)
+  
+  # Choose relevant features
+ features <- c('in.sqft', 'in.bedrooms', 'in.building_america_climate_zone', 'in.county', 'in.misc_extra_refrigerator',
+                'in.misc_freezer',
+                'in.misc_gas_fireplace',
+                'in.misc_gas_grill',
+                'in.misc_gas_lighting',
+                'in.misc_hot_tub_spa',
+                'in.misc_pool_heater',
+                'in.misc_pool_pump',
+                'in.misc_well_pump', 
+                'in.heating_fuel',
+                'in.heating_setpoint',
+                'in.hvac_cooling_efficiency',
+                'in.hvac_cooling_type',
+                'in.hvac_heating_type',
+                'in.insulation_wall',
+                'in.insulation_ceiling',
+                 'in.insulation_floor',
+                 'in.insulation_foundation_wall',
+                 'in.insulation_roof',
+                 'in.insulation_slab',
+'New_Dry_Bulb_Temperature', 'Relative Humidity [%]', 'Wind Speed [m/s]','Direct Normal Radiation [W/m2]',
+              'Diffuse Horizontal Radiation [W/m2]',
+              'Global Horizontal Radiation [W/m2]')
+  
+  # Encode categorical features
+  july_data <- july_data %>%
+    select(features, Total_Energy_Consumption, hour) %>%
+    mutate(across(starts_with("in."), as.factor))
+  
+  # Split the dataset
+  # for reproducibility
+  split <- sample.split(july_data$Total_Energy_Consumption, SplitRatio = 0.7)
+  train_data <- subset(july_data, split == TRUE)
+  test_data <- subset(july_data, split == FALSE)
+  
+  # Rename columns with special characters
+  colnames(train_data) <- make.names(colnames(train_data))
+  colnames(test_data) <- make.names(colnames(test_data))
+  
+  # Build a Decision Tree model
+  model <- rpart(Total_Energy_Consumption ~ ., data = train_data)
+  
+  # Make predictions for all hours in the test set
+  all_predictions <- predict(model, newdata = test_data)
+  
+  rmse <- sqrt(mean((all_predictions - test_data$Total_Energy_Consumption)^2))
+  accuracy <- 1 - rmse
+  
+  # Combine predictions with the original test_data
+  predictions_with_hour <- cbind(test_data$hour, all_predictions)
+  
+  # Convert to a data frame
+  predictions_with_hour_df <- as.data.frame(predictions_with_hour)
+  
+  # Group predictions by hour and calculate the mean prediction for each hour
+  grouped_predictions <- predictions_with_hour_df %>%
+    group_by(V1) %>%
+    summarize(sum_prediction = max(all_predictions))
+  
+  # Store the results in the list
+  results_list[[paste0("City_", city_id)]] <- list(
+    Accuracy = accuracy,
+    RMSE = rmse,
+    Grouped_Predictions = grouped_predictions
+  )
+}
+
+# Access the results for a specific city, e.g., City 3
+results_list[["City_3"]]
+results_list[["City_4"]]
+```
+```{r}
+library(writexl)
+
+output_path <- "C:/Users/disha/OneDrive/Desktop/SC_Summerville.xlsx"  # Replace with your desired path
+
+# Write the merged data to an Excel file
+write_xlsx(SC_Summerville, output_path)
+
+# Print a message indicating that the file has been saved
+cat("Merged data has been saved to Excel file at:", output_path)
+```
+```{r}
+#FOR PEAK ENERGY DEMAND USAGE-ORIGINAL TEMPERATURE-INSULATION WALL
+# Install and load the required library
+#install.packages("openxlsx")
+library(openxlsx)
+
+# Create a new Excel workbook
+wb <- createWorkbook()
+
+# Loop through insulation_split[[1]] to insulation_split[[15]]
+for (i in 1:15) {
+  # Convert 'time' to datetime format
+  insulation_split[[i]]$time <- as.POSIXct(insulation_split[[i]]$time)
+
+  # Extract month and hour
+  insulation_split[[i]]$month <- as.numeric(format(insulation_split[[i]]$time, "%m"))
+  insulation_split[[i]]$hour <- as.numeric(format(insulation_split[[i]]$time, "%H"))
+
+  # Select data for July
+  july_data <- filter(insulation_split[[i]], month == 7)
+
+  # Choose relevant features
+  features <- c('in.sqft', 'in.bedrooms', 'in.building_america_climate_zone', 'in.city', 'in.county', 'in.misc_extra_refrigerator',
+                'in.misc_freezer',
+                'in.misc_gas_fireplace',
+                'in.misc_gas_grill',
+                'in.misc_gas_lighting',
+                'in.misc_hot_tub_spa',
+                'in.misc_pool_heater',
+                'in.misc_pool_pump',
+                'in.misc_well_pump', 
+                'in.heating_fuel',
+                'in.heating_setpoint',
+                'in.hvac_cooling_efficiency',
+                'in.hvac_cooling_type',
+                'in.hvac_heating_type',
+                'in.insulation_ceiling',
+                 'in.insulation_floor',
+                 'in.insulation_foundation_wall',
+                 'in.insulation_roof',
+                 'in.insulation_slab',
+'Dry Bulb Temperature [°C]', 'Relative Humidity [%]', 'Wind Speed [m/s]','Direct Normal Radiation [W/m2]',
+              'Diffuse Horizontal Radiation [W/m2]',
+              'Global Horizontal Radiation [W/m2]')
+
+  # Encode categorical features
+  july_data <- july_data %>%
+    select(features, Total_Energy_Consumption, hour) %>%
+    mutate(across(starts_with("in."), as.factor))
+
+  # Assuming Total_Energy_Consumption is the target variable
+  # Train a decision tree model
+  model <- rpart(Total_Energy_Consumption ~ ., data = july_data)
+  
+  # Predict energy consumption using the decision tree model
+  july_data$predicted_energy <- predict(model, newdata = july_data)
+
+  # Assuming 'model' is your decision tree model and 'income_split' is your dataset
+  predictions <- predict(model, newdata = july_data)
+  actual_values <- july_data$Total_Energy_Consumption
+
+  # Mean Absolute Error (MAE)
+  mae <- mean(abs(actual_values - predictions))
+  # Mean Squared Error (MSE)
+  mse <- mean((actual_values - predictions)^2)
+  # Root Mean Squared Error (RMSE)
+  rmse <- sqrt(mse)
+  # Accuracy
+  Accuracy <- 1 - rmse
+
+  # Extract peak future energy demand
+  peak_demand <- july_data %>%
+    group_by(hour) %>%
+    summarize(peak_energy_demand = max(predicted_energy))
+
+  # Create a new sheet for each Insulation in the Excel workbook
+  addWorksheet(wb, sheetName = paste0("Insulation_", i))
+
+  # Write the results to the Excel sheet
+  writeData(wb, sheet = paste0("Insulation_", i), x = list(
+    Results = list(
+      MAE = mae,
+      MSE = mse,
+      RMSE = rmse,
+      Accuracy = Accuracy
+    ),
+    Peak_Demand = peak_demand
+  ), startCol = 1, startRow = 1)
+}
+
+# Save the Excel workbook to a file
+saveWorkbook(wb, file = "results_insulation.xlsx", overwrite = TRUE)
+```
+```{r}
+#FOR PEAK ENERGY DEMAND USAGE-NEW TEMPERATURE-INSULATION WALL
+# Install and load the required library
+#install.packages("openxlsx")
+library(openxlsx)
+
+# Create a new Excel workbook
+wb <- createWorkbook()
+
+# Loop through insulation_split[[1]] to insulation_split[[15]]
+for (i in 1:15) {
+  # Convert 'time' to datetime format
+  insulation_split[[i]]$time <- as.POSIXct(insulation_split[[i]]$time)
+
+  # Extract month and hour
+  insulation_split[[i]]$month <- as.numeric(format(insulation_split[[i]]$time, "%m"))
+  insulation_split[[i]]$hour <- as.numeric(format(insulation_split[[i]]$time, "%H"))
+
+  # Select data for July
+  july_data <- filter(insulation_split[[i]], month == 7)
+
+  # Choose relevant features
+  features <- c('in.sqft', 'in.bedrooms', 'in.building_america_climate_zone', 'in.city', 'in.county', 'in.misc_extra_refrigerator',
+                'in.misc_freezer',
+                'in.misc_gas_fireplace',
+                'in.misc_gas_grill',
+                'in.misc_gas_lighting',
+                'in.misc_hot_tub_spa',
+                'in.misc_pool_heater',
+                'in.misc_pool_pump',
+                'in.misc_well_pump', 
+                'in.heating_fuel',
+                'in.heating_setpoint',
+                'in.hvac_cooling_efficiency',
+                'in.hvac_cooling_type',
+                'in.hvac_heating_type',
+                'in.insulation_ceiling',
+                 'in.insulation_floor',
+                 'in.insulation_foundation_wall',
+                 'in.insulation_roof',
+                 'in.insulation_slab',
+'New_Dry_Bulb_Temperature', 'Relative Humidity [%]', 'Wind Speed [m/s]','Direct Normal Radiation [W/m2]',
+              'Diffuse Horizontal Radiation [W/m2]',
+              'Global Horizontal Radiation [W/m2]')
+
+  # Encode categorical features
+  july_data <- july_data %>%
+    select(features, Total_Energy_Consumption, hour) %>%
+    mutate(across(starts_with("in."), as.factor))
+
+  # Assuming Total_Energy_Consumption is the target variable
+  # Train a decision tree model
+  model <- rpart(Total_Energy_Consumption ~ ., data = july_data)
+
+  # Predict energy consumption using the decision tree model
+  july_data$predicted_energy <- predict(model, newdata = july_data)
+
+  # Assuming 'model' is your decision tree model and 'income_split' is your dataset
+  predictions <- predict(model, newdata = july_data)
+  actual_values <- july_data$Total_Energy_Consumption
+
+  # Mean Absolute Error (MAE)
+  mae <- mean(abs(actual_values - predictions))
+  # Mean Squared Error (MSE)
+  mse <- mean((actual_values - predictions)^2)
+  # Root Mean Squared Error (RMSE)
+  rmse <- sqrt(mse)
+  # Accuracy
+  Accuracy <- 1 - rmse
+
+  # Extract peak future energy demand
+  peak_demand <- july_data %>%
+    group_by(hour) %>%
+    summarize(peak_energy_demand = max(predicted_energy))
+
+  # Create a new sheet for each Insulation in the Excel workbook
+  addWorksheet(wb, sheetName = paste0("Insulation_", i))
+
+  # Write the results to the Excel sheet
+  writeData(wb, sheet = paste0("Insulation_", i), x = list(
+    Results = list(
+      MAE = mae,
+      MSE = mse,
+      RMSE = rmse,
+      Accuracy = Accuracy
+    ),
+    Peak_Demand = peak_demand
+  ), startCol = 1, startRow = 1)
+}
+
+# Save the Excel workbook to a file
+saveWorkbook(wb, file = "results_insulation_weather_plus_5.xlsx", overwrite = TRUE)
+```
+
+
+
+
+
+
+```{r}
+library(dplyr)
+
+# Assuming your data frame is named 'your_data'
+# Assuming the 'time' column is already in datetime format
+
+# Group by hour and calculate sum and average
+grouped_data <- test_df %>%
+
+  group_by(bldg_id,Hour=as.numeric(hour(time)),
+in.bedrooms,
+in.building_america_climate_zone,
+in.city,
+in.county,
+in.income,
+in.insulation_wall,
+in.lighting,
+in.misc_extra_refrigerator,
+in.misc_freezer,
+in.occupants,
+in.refrigerator,
+in.weather_file_latitude,
+in.weather_file_longitude) %>%
+summarize(
+          Total_Energy_Consumption_Kwh=sum(Total_Energy_Consumption),
+         Average_New_Dry_Bulb_Temperature=mean(New_Dry_Bulb_Temperature),
+         Average_Dry_Bulb_Temperature=mean(`Dry Bulb Temperature [°C]`))
+
+# Print the grouped data
+head(grouped_data)
+
+grouped_data_final <- grouped_data %>%
+ 
+  select(bldg_id,Hour,
+in.bedrooms,
+in.building_america_climate_zone,
+in.city,
+in.county,
+in.income,
+in.insulation_wall,
+in.lighting,
+in.misc_extra_refrigerator,
+in.misc_freezer,
+in.occupants,
+in.refrigerator,
+in.weather_file_latitude,
+in.weather_file_longitude,
+Average_Dry_Bulb_Temperature,
+Average_New_Dry_Bulb_Temperature,
+Total_Energy_Consumption_Kwh) 
+
+# Print the grouped data
+head(grouped_data_final)
+```
+
+
+```{r}
+
+
+```
+
+
+```{r}
+library(writexl)
+
+output_path <- "C:/Users/disha/OneDrive/Desktop/grouped_data.xlsx"  # Replace with your desired path
+
+# Write the merged data to an Excel file
+write_xlsx(grouped_data, output_path)
+
+# Print a message indicating that the file has been saved
+cat("Merged data has been saved to Excel file at:", output_path)
+
+```
+```{r}
+
+
+#i) Identify one potential approach to reduce peak energy demand
+#j) What would you suggest, how would you model the impact. How would you explain the
+#impact. BE DATA DRIVEN
+
+
+#USING GRAPHS AND MODELS WE DETERMINED THAT
+
+#Recommendation1: Allow usage of higher insulating materials for walls such as Brick 12 Inch, 3-Wythe R-15 and CMU 6-in Hollow R-15 to be used in future constructions and/or replace existing building with such materials to achieve maximum energy savings which will ultimately reduce loss of energy thus reducing energy usage.
+#Recommendation2: Optimize energy usage by using LED lights as the main source of lighting for houses as it uses the least energy out of the three different types thus reducing total energy usage across South Carolina residences.
+#Recommendation3: Focus on Charlotte area( as energy range is in 200+ kWh) that use most energy and allocate resources there to prevent blackouts. 
+# Load the packages
+library(ggmap)
+library(dplyr)
+
+# Set your Google Maps API key
+api_key <- "AIzaSyBhR5cUtbHi0S22QlCI4N_YbfiUSX7Y27A"
+register_google(key = api_key)
+
+
+
+
+# Assuming "time" column is in POSIXct format
+# Assuming "Total_Energy_Consumption" is a numeric column
+
+# Load the dplyr package
+library(dplyr)
+
+# Extract only rows with the maximum energy consumption for each building
+max_energy_df <- test_df %>%
+  group_by(bldg_id) %>%
+  filter(Total_Energy_Consumption == max(Total_Energy_Consumption)) %>%
+  ungroup()
+
+# Define breaks and labels for energy consumption categories
+breaks <- c(0, 4, 9, 13, 17, Inf)
+labels <- c("0-2", "2.1-5", "5.1-9", "9.1-13", "13.1+")
+
+# Create energy consumption categories
+energy_categories <- cut(max_energy_df$Total_Energy_Consumption, breaks = breaks, labels = labels)
+
+# Get the base map
+base_map <- get_map(location = c(lon = mean(max_energy_df$in.weather_file_longitude), lat = mean(max_energy_df$in.weather_file_latitude)),
+                    zoom = 7, maptype = "terrain", scale = 1)
+
+# Create a ggmap with colored points based on energy categories
+ggmap(base_map) +
+  geom_point(data = max_energy_df, aes(x = in.weather_file_longitude, y = in.weather_file_latitude, color = energy_categories,size=Total_Energy_Consumption),
+             show.legend = TRUE) +
+  scale_color_manual(values = c("0-2" = "green", "2.1-5" = "yellow", "5.1-9" = "orange", "9.1-13" = "red", "13.1+" = "darkred"),
+                     guide = "legend", name = "Energy Usage Category") +
+  labs(title = "Building Locations and Energy Usage") +
+  scale_size_continuous(name = "Energy Consumption (KWh)")
+
+
+
+
+```
+```{r}
+
+
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+
+# Create a line plot to show energy consumption trends over time
+# Assuming your dataset is named 'test_df'
+# Assuming 'time' column is already in POSIXct format
+
+
+
+# Create a line plot to show energy consumption trends over time
+ggplot(test_df, aes(x = time, y = Total_Energy_Consumption, color = as.factor(in.lighting))) +
+  geom_line() +
+  labs(title = "Energy Consumption Trends Over Time",
+       x = "Time",
+       y = "Total Energy Consumption (KWh)",
+       color = "Lighting") +
+  theme_minimal()
+
+
+```
+```{r}
+# Create boxplots to compare energy consumption across different categorical variables
+ggplot(test_df, aes(x = in.building_america_climate_zone, y = Total_Energy_Consumption)) +
+  geom_boxplot(fill = "skyblue") +
+  labs(title = "Energy Consumption Across Climate Zones",
+       x = "Climate Zone",
+       y = "Total Energy Consumption (KWh)") +
+  theme_minimal()
+
+```
+
+```{r}
+
+
+# Load necessary libraries
+library(ggplot2)
+
+# Create a scatter plot to show the relationship between income and energy consumption
+ggplot(test_df, aes(x = in.income, y = Total_Energy_Consumption)) +
+  geom_point() +
+  labs(title = "Income vs Energy Consumption",
+       x = "Income",
+       y = "Total Energy Consumption (KWh)") +
+  theme_minimal()+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+```{r}
+
+
+# Load necessary libraries
+library(ggplot2)
+
+# Bar plot for in.insulation_wall with total energy consumption
+ggplot(test_df, aes(x = in.insulation_wall, y = Total_Energy_Consumption, fill = in.insulation_wall)) +
+  geom_bar(stat = "summary", fun = "Mean") +
+  labs(title = "Avg Total Energy Consumption by Insulation Wall Type",
+       x = "Insulation Wall Type",
+       y = "Average Total Energy Consumption (KWh)") +
+  theme_minimal() +theme(axis.text.x = element_text(angle = 90,hjust = 1))+
+  theme(legend.position = "none")
+
+# Bar plot for city with total energy consumption
+ggplot(test_df, aes(x = in.city, y = Total_Energy_Consumption, fill = in.city)) +
+  geom_bar(stat = "summary", fun = "Mean") +
+  labs(title = "Avg Total Energy Consumption by City",
+       x = "City",
+       y = "Average Total Energy Consumption (KWh)") +
+  theme_minimal() +theme(axis.text.x = element_text(angle = 90,hjust = 1))+
+  theme(legend.position = "none")
+
+
+
+```
+```{r}
+library(ggplot2)
+
+# Stacked bar plot for in.insulation_wall with total energy consumption and Hour
+ggplot(grouped_data_final, aes(x = factor(Hour), y = Total_Energy_Consumption_Kwh, fill = in.insulation_wall)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Energy Consumption by Hour and Insulation Wall Type",
+       x = "Hour",
+       y = "Total Energy Consumption (KWh)",
+       fill = "Insulation Wall Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 1)) +
+  theme(legend.position = "top")
+
+# Stacked bar plot for city with total energy consumption and Hour
+ggplot(grouped_data_final, aes(x = factor(Hour), y = Total_Energy_Consumption_Kwh, fill = in.city)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Energy Consumption by Hour and City",
+       x = "Hour",
+       y = "Total Energy Consumption (KWh)",
+       fill = "City") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 0, hjust = 1)) +
+  theme(legend.position = "top")
+
+
+
+
+```
+```{r}
+library(dplyr)
+
+# We have used this for our shinny app -predictor slide
+
+# Group by hour and calculate sum and average
+grouped_data_date <- test_df %>%
+
+  group_by(bldg_id,Date=date(time),
+           in.sqft,
+in.bedrooms,
+in.building_america_climate_zone,
+in.city,
+in.county,
+in.income,
+in.insulation_wall,
+in.lighting,
+in.misc_extra_refrigerator,
+in.misc_freezer,
+in.occupants,
+in.refrigerator,
+in.weather_file_latitude,
+in.weather_file_longitude) %>%
+summarize(
+          Total_Energy_Consumption_Kwh=sum(Total_Energy_Consumption),
+         Average_New_Dry_Bulb_Temperature=mean(New_Dry_Bulb_Temperature),
+         Average_Dry_Bulb_Temperature=mean(`Dry Bulb Temperature [°C]`))
+
+# Print the grouped data
+head(grouped_data_date)
+```
+
+
+```{r}
+library(dplyr)
+
+output_path <- "C:/Users/disha/OneDrive/Desktop/grouped_data_date.csv"  # Replace with your desired path
+
+# Write the merged data to an Excel file
+write.csv(grouped_data_date, output_path, row.names = FALSE)
+
+# Print a message indicating that the file has been saved
+cat("Merged data has been saved to Excel file at:", output_path)
+
+
+
+```
+
