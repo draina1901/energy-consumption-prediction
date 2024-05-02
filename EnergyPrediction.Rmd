@@ -1,5 +1,5 @@
 ---
-title: "IDSPROJECT"
+title: "ENERGY PREDICTION"
 output: html_document
 date: "2023-11-28"
 ---
@@ -294,7 +294,6 @@ df_static_updated_1 <- df_static[, !(names(df_static) %in% c("upgrade"
 
 library(dplyr)
 
-# Assuming 'your_dataset' is the name of your dataset
 # Replace 'column1', 'column2', etc., with the actual column names you want to select
 
 df_static_updated <- select(df_static_updated_1, bldg_id,
@@ -689,8 +688,6 @@ library(tidyverse)
 library(tree)
 library(caTools)
 
-# Assuming city_split is a list containing your data frames
-
 # Initialize an empty list to store the results for each city
 results_list <- list()
 
@@ -785,7 +782,6 @@ library(tree)
 library(caTools)
 
 # Load the data
-# Assuming insulation_split is a list containing your data frames
 
 # Convert 'time' to datetime format
 insulation_split[[3]]$time <- as.POSIXct(insulation_split[[3]]$time)
@@ -1359,9 +1355,6 @@ saveWorkbook(wb, file = "results_insulation_weather_plus_5.xlsx", overwrite = TR
 ```{r}
 library(dplyr)
 
-# Assuming your data frame is named 'your_data'
-# Assuming the 'time' column is already in datetime format
-
 # Group by hour and calculate sum and average
 grouped_data <- test_df %>%
 
@@ -1453,10 +1446,6 @@ register_google(key = api_key)
 
 
 
-
-# Assuming "time" column is in POSIXct format
-# Assuming "Total_Energy_Consumption" is a numeric column
-
 # Load the dplyr package
 library(dplyr)
 
@@ -1498,9 +1487,6 @@ library(ggplot2)
 library(dplyr)
 
 # Create a line plot to show energy consumption trends over time
-# Assuming your dataset is named 'test_df'
-# Assuming 'time' column is already in POSIXct format
-
 
 
 # Create a line plot to show energy consumption trends over time
